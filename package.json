@@ -1,0 +1,19 @@
+{
+  "name": "locus",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": ["shared", "server", "client", "scripts"],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w shared && npm run build -w server && npm run build -w client",
+    "test": "npm run test -w shared",
+    "typecheck": "tsc -b shared server client scripts",
+    "seed": "npm run seed -w scripts",
+    "scan": "npm run scan -w scripts --"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}
