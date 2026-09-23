@@ -1,8 +1,11 @@
-import type { BaselineRequest, BaselineResponse, CityInfo, MatchRequest, MatchResponse } from '@locus/shared';
-import { mockBaseline, mockCities, mockMatch, mockSuggest, type Suggestion } from './mock/data';
+import type { BaselineRequest, BaselineResponse, CityInfo, MatchRequest, MatchResponse, Suggestion } from '@locus/shared';
+import { mockBaseline, mockCities, mockMatch, mockSuggest } from './mock/data';
+
+export const MAPS_BROWSER_KEY = import.meta.env.GOOGLE_MAPS_BROWSER_KEY ?? '';
+export const MAPS_MAP_ID = import.meta.env.GOOGLE_MAPS_MAP_ID ?? '';
 
 /** Mock mode runs the whole flow without Google or a database. */
-export const MOCK = import.meta.env.VITE_MOCK === '1' || !import.meta.env.VITE_GOOGLE_MAPS_BROWSER_KEY;
+export const MOCK = import.meta.env.VITE_MOCK === '1' || !MAPS_BROWSER_KEY;
 
 async function post<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {

@@ -1,13 +1,11 @@
 import { useMemo } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
-import { CATEGORIES, EQUIV_MUST_MIN, displayOverall, isEquivalent, verdictLine } from '@locus/shared';
+import { CATEGORIES, EQUIV_MUST_MIN, displayOverall, explainRows, isEquivalent, verdictLine } from '@locus/shared';
 import { CategoryGlyph, importanceToMode } from '../atlas/glyphs';
-import { PaperMap } from '../components/PaperMap';
+import { AtlasMap } from '../components/AtlasMap';
 import { RangeStrip } from '../components/RangeStrip';
 import { RoutineThread } from '../components/RoutineThread';
-import { fallbackExplanation } from '../lib/explain';
 import { buildThread } from '../lib/geo';
-import { mockCharacterLine } from '../mock/data';
 import { useLocus } from '../state';
 
 export function LocalityPage() {
@@ -22,7 +20,8 @@ export function LocalityPage() {
   if (!match || !baseline || !state.city) return <Navigate to="/match" replace />;
   if (!r) return <Navigate to="/match" replace />;
 
-  const ex = r.explanation ?? fallbackExplanation(r, mockCharacterLine(r.locality.id));
+  const ex = explainRows(r.rows);
+  const character = r.locality.character ?? r.locality.subRegion ?? `${r.locality.name}.`;
   const equivalent = isEquivalent(r.rows, r.overall);
   const preserved = thread.filter((n) => n.point).length;
   const kept = r.rows.filter((x) => x.importance !== 'none');
@@ -41,12 +40,12 @@ export function LocalityPage() {
       <header className="profile__head">
         <p className="meta">{eyebrow}</p>
         <h1 className="display display--xl profile__name">{r.locality.name}</h1>
-        <p className="display display--m display--i profile__char">{ex.characterLine}</p>
+        <p className="display display--m display--i profile__char">{character}</p>
       </header>
 
       <div className="profile__hero">
         <div className="profile__map">
-          <PaperMap
+          <AtlasMap
             center={r.locality.center}
             spanM={1900}
             places={r.points.map((p, i) => ({ id: `${r.locality.id}-${i}`, lat: p.lat, lng: p.lng, category: p.category, mode: importanceToMode(state.importance[p.category]) }))}

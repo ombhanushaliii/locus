@@ -35,7 +35,6 @@ export function AddressesPage() {
           anchor: baseline.anchor,
           cityId: pune.id,
           categories: baseline.baseline.map((b) => ({ category: b.category, baselineCount: b.count, importance: CATEGORIES[b.category].defaultImportance })),
-          routine: [],
         });
         dispatch({ type: 'setMatch', match });
         nav(`/match/${match.results[0]?.locality.id ?? ''}`);

@@ -14,13 +14,8 @@ import {
   type MatchResponse,
   type MatchResult,
   type PlacePoint,
+  type Suggestion,
 } from '@locus/shared';
-
-export interface Suggestion {
-  placeId: string;
-  label: string;
-  secondary: string;
-}
 
 /* Deterministic pseudo-random so the demo map looks the same every run. */
 function rng(seed: number) {
@@ -50,7 +45,7 @@ function scatter(center: LatLng, radiusM: number, n: number, seed: number, categ
   return out;
 }
 
-const HOMES: Record<string, { label: string; secondary: string; center: LatLng; locality: string; cityId: string; counts: Record<CategoryKey, number> }> = {
+const HOMES: Record<string, { label: string; secondary: string; center: LatLng; locality: string; cityId?: string; counts: Record<CategoryKey, number> }> = {
   'mock-bandra': {
     label: 'Bandra West',
     secondary: 'Mumbai, Maharashtra',
@@ -72,7 +67,6 @@ const HOMES: Record<string, { label: string; secondary: string; center: LatLng; 
     secondary: 'Maharashtra',
     center: { lat: 18.7546, lng: 73.4062 },
     locality: 'Lonavala',
-    cityId: undefined as unknown as string,
     counts: { grocery: 1, megastore: 0, healthcare: 1, fitness: 0, food: 2, transit: 0, education: 1, entertainment: 0, worship: 1 },
   },
 };
@@ -122,31 +116,31 @@ interface MockLocality {
   center: LatLng;
   counts: Record<CategoryKey, number>;
   airportMinutes: number;
-  characterLine: string;
+  character: string;
 }
 
 const LOCALITIES: Record<string, MockLocality[]> = {
   pune: [
-    { id: 101, name: 'Aundh', center: { lat: 18.559, lng: 73.8075 }, counts: { grocery: 6, megastore: 2, healthcare: 5, fitness: 1, food: 16, transit: 3, education: 6, entertainment: 5, worship: 4 }, airportMinutes: 34, characterLine: 'Quiet, tree-lined, well-connected.' },
-    { id: 102, name: 'Baner', center: { lat: 18.559, lng: 73.7868 }, counts: { grocery: 5, megastore: 3, healthcare: 4, fitness: 2, food: 18, transit: 1, education: 4, entertainment: 6, worship: 2 }, airportMinutes: 40, characterLine: 'Newer, busier, restaurant-heavy.' },
-    { id: 103, name: 'Kothrud', center: { lat: 18.5074, lng: 73.8077 }, counts: { grocery: 7, megastore: 1, healthcare: 6, fitness: 1, food: 9, transit: 2, education: 8, entertainment: 3, worship: 6 }, airportMinutes: 45, characterLine: 'Settled, residential, school-dense.' },
-    { id: 104, name: 'Viman Nagar', center: { lat: 18.5679, lng: 73.9143 }, counts: { grocery: 4, megastore: 2, healthcare: 3, fitness: 3, food: 15, transit: 1, education: 3, entertainment: 7, worship: 1 }, airportMinutes: 9, characterLine: 'Near the airport, mall-centred.' },
-    { id: 105, name: 'Koregaon Park', center: { lat: 18.5362, lng: 73.8939 }, counts: { grocery: 3, megastore: 1, healthcare: 4, fitness: 4, food: 20, transit: 2, education: 2, entertainment: 6, worship: 2 }, airportMinutes: 20, characterLine: 'Leafy, cafe-first, low on groceries.' },
+    { id: 101, name: 'Aundh', center: { lat: 18.559, lng: 73.8075 }, counts: { grocery: 6, megastore: 2, healthcare: 5, fitness: 1, food: 16, transit: 3, education: 6, entertainment: 5, worship: 4 }, airportMinutes: 34, character: 'Quiet, tree-lined, well-connected.' },
+    { id: 102, name: 'Baner', center: { lat: 18.559, lng: 73.7868 }, counts: { grocery: 5, megastore: 3, healthcare: 4, fitness: 2, food: 18, transit: 1, education: 4, entertainment: 6, worship: 2 }, airportMinutes: 40, character: 'Newer, busier, restaurant-heavy.' },
+    { id: 103, name: 'Kothrud', center: { lat: 18.5074, lng: 73.8077 }, counts: { grocery: 7, megastore: 1, healthcare: 6, fitness: 1, food: 9, transit: 2, education: 8, entertainment: 3, worship: 6 }, airportMinutes: 45, character: 'Settled, residential, school-dense.' },
+    { id: 104, name: 'Viman Nagar', center: { lat: 18.5679, lng: 73.9143 }, counts: { grocery: 4, megastore: 2, healthcare: 3, fitness: 3, food: 15, transit: 1, education: 3, entertainment: 7, worship: 1 }, airportMinutes: 9, character: 'Near the airport, mall-centred.' },
+    { id: 105, name: 'Koregaon Park', center: { lat: 18.5362, lng: 73.8939 }, counts: { grocery: 3, megastore: 1, healthcare: 4, fitness: 4, food: 20, transit: 2, education: 2, entertainment: 6, worship: 2 }, airportMinutes: 20, character: 'Leafy, cafe-first, low on groceries.' },
   ],
   mumbai: [
-    { id: 201, name: 'Khar West', center: { lat: 19.0728, lng: 72.8326 }, counts: { grocery: 5, megastore: 2, healthcare: 8, fitness: 3, food: 15, transit: 3, education: 4, entertainment: 3, worship: 3 }, airportMinutes: 25, characterLine: 'Bandra, one stop north.' },
-    { id: 202, name: 'Powai', center: { lat: 19.1176, lng: 72.906 }, counts: { grocery: 6, megastore: 3, healthcare: 7, fitness: 4, food: 12, transit: 1, education: 6, entertainment: 5, worship: 2 }, airportMinutes: 30, characterLine: 'Planned, lakeside, car-dependent.' },
-    { id: 203, name: 'Chembur', center: { lat: 19.0522, lng: 72.9005 }, counts: { grocery: 7, megastore: 2, healthcare: 9, fitness: 2, food: 10, transit: 4, education: 5, entertainment: 3, worship: 5 }, airportMinutes: 35, characterLine: 'Old suburb, well-served, unglamorous.' },
+    { id: 201, name: 'Khar West', center: { lat: 19.0728, lng: 72.8326 }, counts: { grocery: 5, megastore: 2, healthcare: 8, fitness: 3, food: 15, transit: 3, education: 4, entertainment: 3, worship: 3 }, airportMinutes: 25, character: 'Bandra, one stop north.' },
+    { id: 202, name: 'Powai', center: { lat: 19.1176, lng: 72.906 }, counts: { grocery: 6, megastore: 3, healthcare: 7, fitness: 4, food: 12, transit: 1, education: 6, entertainment: 5, worship: 2 }, airportMinutes: 30, character: 'Planned, lakeside, car-dependent.' },
+    { id: 203, name: 'Chembur', center: { lat: 19.0522, lng: 72.9005 }, counts: { grocery: 7, megastore: 2, healthcare: 9, fitness: 2, food: 10, transit: 4, education: 5, entertainment: 3, worship: 5 }, airportMinutes: 35, character: 'Old suburb, well-served, unglamorous.' },
   ],
   bengaluru: [
-    { id: 301, name: 'Koramangala', center: { lat: 12.9352, lng: 77.6245 }, counts: { grocery: 7, megastore: 3, healthcare: 10, fitness: 6, food: 20, transit: 1, education: 4, entertainment: 6, worship: 2 }, airportMinutes: 75, characterLine: 'Dense, young, everything walkable.' },
-    { id: 302, name: 'Jayanagar', center: { lat: 12.9308, lng: 77.5838 }, counts: { grocery: 9, megastore: 2, healthcare: 11, fitness: 3, food: 14, transit: 2, education: 6, entertainment: 3, worship: 6 }, airportMinutes: 80, characterLine: 'Old Bengaluru, grocery-rich.' },
-    { id: 303, name: 'Whitefield', center: { lat: 12.9698, lng: 77.7499 }, counts: { grocery: 5, megastore: 4, healthcare: 6, fitness: 5, food: 13, transit: 1, education: 5, entertainment: 7, worship: 1 }, airportMinutes: 70, characterLine: 'Tech corridor, malls, long roads.' },
+    { id: 301, name: 'Koramangala', center: { lat: 12.9352, lng: 77.6245 }, counts: { grocery: 7, megastore: 3, healthcare: 10, fitness: 6, food: 20, transit: 1, education: 4, entertainment: 6, worship: 2 }, airportMinutes: 75, character: 'Dense, young, everything walkable.' },
+    { id: 302, name: 'Jayanagar', center: { lat: 12.9308, lng: 77.5838 }, counts: { grocery: 9, megastore: 2, healthcare: 11, fitness: 3, food: 14, transit: 2, education: 6, entertainment: 3, worship: 6 }, airportMinutes: 80, character: 'Old Bengaluru, grocery-rich.' },
+    { id: 303, name: 'Whitefield', center: { lat: 12.9698, lng: 77.7499 }, counts: { grocery: 5, megastore: 4, healthcare: 6, fitness: 5, food: 13, transit: 1, education: 5, entertainment: 7, worship: 1 }, airportMinutes: 70, character: 'Tech corridor, malls, long roads.' },
   ],
   'delhi-ncr': [
-    { id: 401, name: 'Hauz Khas', subRegion: 'Delhi', center: { lat: 28.5494, lng: 77.2001 }, counts: { grocery: 5, megastore: 1, healthcare: 7, fitness: 3, food: 16, transit: 2, education: 5, entertainment: 5, worship: 3 }, airportMinutes: 30, characterLine: 'Village lanes, deer park, metro.' },
-    { id: 402, name: 'Sector 29', subRegion: 'Gurugram', center: { lat: 28.4691, lng: 77.0636 }, counts: { grocery: 4, megastore: 3, healthcare: 5, fitness: 5, food: 20, transit: 1, education: 2, entertainment: 6, worship: 1 }, airportMinutes: 35, characterLine: 'Nightlife grid, few groceries.' },
-    { id: 403, name: 'Sector 18', subRegion: 'Noida', center: { lat: 28.5708, lng: 77.3261 }, counts: { grocery: 6, megastore: 3, healthcare: 6, fitness: 3, food: 15, transit: 2, education: 4, entertainment: 7, worship: 2 }, airportMinutes: 55, characterLine: 'Mall district with a metro spine.' },
+    { id: 401, name: 'Hauz Khas', subRegion: 'Delhi', center: { lat: 28.5494, lng: 77.2001 }, counts: { grocery: 5, megastore: 1, healthcare: 7, fitness: 3, food: 16, transit: 2, education: 5, entertainment: 5, worship: 3 }, airportMinutes: 30, character: 'Village lanes, deer park, metro.' },
+    { id: 402, name: 'Sector 29', subRegion: 'Gurugram', center: { lat: 28.4691, lng: 77.0636 }, counts: { grocery: 4, megastore: 3, healthcare: 5, fitness: 5, food: 20, transit: 1, education: 2, entertainment: 6, worship: 1 }, airportMinutes: 35, character: 'Nightlife grid, few groceries.' },
+    { id: 403, name: 'Sector 18', subRegion: 'Noida', center: { lat: 28.5708, lng: 77.3261 }, counts: { grocery: 6, megastore: 3, healthcare: 6, fitness: 3, food: 15, transit: 2, education: 4, entertainment: 7, worship: 2 }, airportMinutes: 55, character: 'Mall district with a metro spine.' },
   ],
 };
 
@@ -174,23 +168,16 @@ export function mockMatch(req: MatchRequest): MatchResponse {
         scatter(l.center, CATEGORIES[k].radiusM, l.counts[k], l.id * 31 + i, k, `loc-${l.id}`).map(({ lat, lng, category }) => ({ lat, lng, category })),
       );
       return {
-        locality: { id: l.id, name: l.name, subRegion: l.subRegion, center: l.center, viewport: viewportFor(l.center) },
+        locality: { id: l.id, name: l.name, subRegion: l.subRegion, character: l.character, center: l.center, viewport: viewportFor(l.center) },
         overall: overall(rows),
         rows,
         points,
         airportMinutes: l.airportMinutes,
         anchorMinutes: req.anchor ? haversineMin(l.center, req.anchor) : undefined,
-        explanation: null,
       };
     })
     .sort((a, b) => b.overall - a.overall)
     .slice(0, 3);
   const equivalentFound = scored.some((r) => isEquivalent(r.rows, r.overall));
   return { equivalentFound, cityName, results: scored };
-}
-
-export function mockCharacterLine(localityId: number): string | undefined {
-  return Object.values(LOCALITIES)
-    .flat()
-    .find((l) => l.id === localityId)?.characterLine;
 }

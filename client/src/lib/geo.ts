@@ -1,15 +1,8 @@
-import { CATEGORIES, type CategoryKey, type LatLng, type RoutineNode } from '@locus/shared';
+import { CATEGORIES, metersBetween, type CategoryKey, type LatLng, type RoutineNode } from '@locus/shared';
+
+export { metersBetween };
 
 const M_PER_DEG_LAT = 111_320;
-
-export function metersBetween(a: LatLng, b: LatLng): number {
-  const R = 6371e3;
-  const toRad = (x: number) => (x * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
 
 /** Local equirectangular projection: metres east/north of `center`. */
 export function toLocalMeters(center: LatLng, p: LatLng): { east: number; north: number } {

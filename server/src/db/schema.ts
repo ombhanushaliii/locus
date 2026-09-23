@@ -1,45 +1,43 @@
-import {
-  boolean,
-  doublePrecision,
-  integer,
-  jsonb,
-  pgTable,
-  primaryKey,
-  serial,
-  text,
-  timestamp,
-} from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
-export const cities = pgTable('cities', {
+export const cities = sqliteTable('cities', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  centerLat: doublePrecision('center_lat').notNull(),
-  centerLng: doublePrecision('center_lng').notNull(),
-  airportPlaceId: text('airport_place_id').notNull(),
+  centerLat: real('center_lat').notNull(),
+  centerLng: real('center_lng').notNull(),
+  airportLat: real('airport_lat').notNull(),
+  airportLng: real('airport_lng').notNull(),
   airportLabel: text('airport_label').notNull(),
 });
 
-export const localities = pgTable('localities', {
-  id: serial('id').primaryKey(),
-  cityId: text('city_id')
-    .notNull()
-    .references(() => cities.id),
-  name: text('name').notNull(),
-  subRegion: text('sub_region'),
-  centerLat: doublePrecision('center_lat').notNull(),
-  centerLng: doublePrecision('center_lng').notNull(),
-  vpSwLat: doublePrecision('vp_sw_lat').notNull(),
-  vpSwLng: doublePrecision('vp_sw_lng').notNull(),
-  vpNeLat: doublePrecision('vp_ne_lat').notNull(),
-  vpNeLng: doublePrecision('vp_ne_lng').notNull(),
-  housingCount: integer('housing_count').notNull().default(0),
-  isResidential: boolean('is_residential').notNull().default(false),
-  scannedAt: timestamp('scanned_at', { withTimezone: true }),
-});
+export const localities = sqliteTable(
+  'localities',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    cityId: text('city_id')
+      .notNull()
+      .references(() => cities.id),
+    name: text('name').notNull(),
+    subRegion: text('sub_region'),
+    character: text('character'),
+    // Geometry is null until `scan` has geocoded the locality.
+    centerLat: real('center_lat'),
+    centerLng: real('center_lng'),
+    vpSwLat: real('vp_sw_lat'),
+    vpSwLng: real('vp_sw_lng'),
+    vpNeLat: real('vp_ne_lat'),
+    vpNeLng: real('vp_ne_lng'),
+    housingCount: integer('housing_count').notNull().default(0),
+    isResidential: integer('is_residential', { mode: 'boolean' }).notNull().default(false),
+    scannedAt: integer('scanned_at', { mode: 'timestamp' }),
+  },
+  (t) => [uniqueIndex('localities_city_name').on(t.cityId, t.name)],
+);
 
 export type StoredPoint = { placeId: string; lat: number; lng: number };
 
-export const localityAmenityCounts = pgTable(
+export const localityAmenityCounts = sqliteTable(
   'locality_amenity_counts',
   {
     localityId: integer('locality_id')
@@ -47,8 +45,8 @@ export const localityAmenityCounts = pgTable(
       .references(() => localities.id, { onDelete: 'cascade' }),
     category: text('category').notNull(),
     count: integer('count').notNull(),
-    placeIds: text('place_ids').array().notNull().default([]),
-    points: jsonb('points').$type<StoredPoint[]>().notNull().default([]),
+    placeIds: text('place_ids', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+    points: text('points', { mode: 'json' }).$type<StoredPoint[]>().notNull().default(sql`'[]'`),
   },
   (t) => [primaryKey({ columns: [t.localityId, t.category] })],
 );

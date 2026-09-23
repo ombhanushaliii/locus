@@ -154,6 +154,23 @@
   inset: 0;
   display: block;
 }
+/* On a Google map the drawing floats above the tiles; only marks catch the pointer. */
+.papermap__svg--overlay {
+  pointer-events: none;
+  z-index: 1;
+}
+.papermap__svg--overlay .place,
+.papermap__svg--overlay .outline,
+.papermap__svg--overlay .lens__handle {
+  pointer-events: auto;
+}
+.papermap--google .papermap__overlay {
+  z-index: 2;
+}
+.papermap--google .gm-style a[href],
+.papermap--google .gmnoprint {
+  opacity: 0.55;
+}
 .papermap__overlay {
   position: absolute;
   inset: 0;

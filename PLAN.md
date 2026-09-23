@@ -5,7 +5,7 @@ Find the locality in a new Indian city that best preserves the day-to-day life y
 ## 1. Product scope (v1, hackathon)
 
 - **Input**: user's current home address (anywhere in India) + a target city. Optional: one anchor address (work or college) used for commute relationships.
-- **Output**: the three localities in the target city that best reproduce the user's *pattern of life* — not a list of places, but a comparison of whole living environments. Each gets a lifestyle match (0–100), a per-category ledger, a routine-preservation view, and a short structured explanation (what you'd keep / what changes / what you'd give up / what you'd gain). If nothing qualifies as an equivalent, say so plainly and show the closest alternative with what it lacks.
+- **Output**: the three localities in the target city that best reproduce the user's *pattern of life* — not a list of places, but a comparison of whole living environments. Each gets a lifestyle match (0–100), a per-category ledger, a routine-preservation view, and a plain explanation derived from the ledger (what you'd keep / what changes / what you'd give up / what you'd gain). If nothing qualifies as an equivalent, say so plainly and show the closest alternative with what it lacks.
 - **Target cities**: Mumbai, Pune, Bengaluru, Delhi NCR (Delhi / Gurugram / Noida, tagged by sub-region).
 - **Out of scope**: rent, quality scoring beyond the Megastore gate, accounts/auth, user-data persistence, global cities.
 
@@ -25,15 +25,15 @@ Find the locality in a new Indian city that best preserves the day-to-day life y
 | Equivalence | overall ≥ 85 AND every must-have category ≥ 70 |
 | Routine thread | Derived, not scored: ordered chain of must-have categories (+ anchor if given) e.g. `HOME → TRANSIT → WORK → GYM → FOOD → HOME`. Drawn on the home map, then *recreated* on each candidate by snapping each node to the nearest stored place of that category. A node with no place inside its radius renders hollow. |
 | Anchor (work/college) | Optional. Not scored. Routes API drive-time home→anchor from each top-3 locality center, shown as a commute relationship. |
-| Precompute | CLI script per city → Neon; stores `place_id`s, lat/lng, and derived counts only — never names/ratings. Coordinates are a ≤30-day cache per Google ToS; `scan` refreshes them. |
-| Live cost per request | ~10 Nearby Search (home scan) + 1 Geocode + 3–6 Routes + 3 LLM calls |
-| Explanations | Deterministic ledger is source of truth; Claude fills a fixed structured shape (§4.7) from the row data, strict timeout, silent deterministic fallback |
+| Precompute | CLI script per city → SQLite; stores `place_id`s, lat/lng, and derived counts only — never names/ratings. Google's Places policy only sanctions caching `place_id`; keeping coordinates and counts is a knowing gray area accepted for the hackathon, treated as a cache that `scan --force` rebuilds. |
+| Live cost per request | ~10 Nearby Search (home scan) + 1 Geocode + 3–6 Routes |
+| Explanations | Deterministic. `explainRows` in `/shared/explain.ts` derives the verdict and keep / change / give-up / gain lines from the ledger. A locality's one-line *character* is hand-written in the seed list. No model call anywhere. |
 | Airport | Informational only (Routes API drive-time to city's main airport, top 3 only); shown as metadata, not a badge |
 | Same-city | Allowed; exclude the locality containing the home address |
 | Sparse baseline | Warn ("matches will be lenient"), never block |
 | Results | Top 3 |
-| Platform | Web: Vite + React + TypeScript, Express, Drizzle + Neon serverless, single repo `/client` `/server` `/shared` |
-| Persistence | Neon holds precomputed data only; user requests are request-scoped |
+| Platform | Web: Vite + React + TypeScript, Express, Drizzle + SQLite (better-sqlite3, file under `data/`), single repo `/client` `/server` `/shared` |
+| Persistence | SQLite holds precomputed data only; user requests are request-scoped |
 | Design direction | Editorial city atlas, map-first, one accent colour, no dashboard idiom (§4.6). The intelligence is invisible: no "AI" anywhere in the UI. |
 
 ## 3. Category taxonomy
@@ -58,12 +58,12 @@ All radii, thresholds, caps, and weights live in `/shared/scoring.ts` as named c
 
 ```
 /client   Vite + React + TS      linear 3-movement flow, Google Maps JS with custom map style
-/server   Express + TS           /api routes, Google + Claude clients, Drizzle
-/shared   TS                     types, category taxonomy, scoring constants, scoring function, routine derivation
+/server   Express + TS           /api routes, Google client, Drizzle
+/shared   TS                     types, category taxonomy, scoring constants, scoring function, routine derivation, explanation
 /scripts  TS (tsx)               seed + scan CLI for precompute
 ```
 
-### 4.1 Data model (Neon / Drizzle)
+### 4.1 Data model (SQLite / Drizzle, migrated automatically on first open)
 
 ```
 cities
@@ -79,6 +79,7 @@ localities
   city_id       text FK
   name          text           -- 'Koramangala'
   sub_region    text null      -- 'Gurugram' (NCR only)
+  character     text null      -- hand-written one-liner from the seed list
   center_lat    double         -- geocoded location
   center_lng    double
   vp_sw_lat/lng, vp_ne_lat/lng double  -- geocoded viewport
@@ -92,7 +93,7 @@ locality_amenity_counts
   count         int
   place_ids     text[]         -- for refresh/debug only
   points        jsonb          -- [{ placeId, lat, lng }] — needed to recreate the routine thread on the map;
-                               -- coordinates only, ≤30-day cache, refreshed by scan
+                               -- coordinates only; a cache that scan --force rebuilds
   PK (locality_id, category)
 ```
 
@@ -101,6 +102,9 @@ locality_amenity_counts
 ```
 GET  /api/cities
      → [{ id, name, subRegions? }]
+
+GET  /api/suggest?q=<text>                       -- Places Autocomplete (New), region IN, max 5
+     → [{ placeId, label, secondary }]
 
 POST /api/baseline
      body: { placeId, anchorPlaceId? }              -- from Autocomplete
@@ -115,15 +119,14 @@ POST /api/match
              categories: [{ category, baselineCount, importance }],   -- baselineCount already reflects removed places
              routine: string[] }                                       -- ordered category keys, from client
      → { equivalentFound: boolean,
-         results: [{ locality: { id, name, subRegion?, center, viewport },
+         results: [{ locality: { id, name, subRegion?, character?, center, viewport },
                      overall,
                      rows: [{ category, baseline, candidate, score, importance }],
                      points: [{ category, lat, lng }],                 -- for glyphs + recreated routine thread
-                     airportMinutes, anchorMinutes?,
-                     explanation: Explanation | null }] }              -- shape in §4.7
+                     airportMinutes, anchorMinutes? }] }
 ```
 
-`/api/match` never calls Nearby Search — it reads `locality_amenity_counts`, scores in-process using `/shared/scoring.ts`, then makes 3 airport Routes calls (+3 anchor Routes calls if an anchor was given) and 3 Claude calls in parallel for the top 3.
+`/api/match` never calls Nearby Search — it reads `locality_amenity_counts`, scores in-process using `/shared/scoring.ts`, then makes 3 airport Routes calls (+3 anchor Routes calls if an anchor was given) in parallel for the top 3. Explanations are not part of the response; the client derives them from `rows`.
 
 ### 4.3 Scoring (`/shared/scoring.ts`)
 
@@ -144,9 +147,16 @@ deriveRoutine(rows, hasAnchor):            -- /shared/routine.ts, display only
   order = ['transit', 'anchor', 'grocery', 'fitness', 'food', 'healthcare', 'education', 'entertainment', 'megastore', 'worship']
   return ['home', ...order.filter(k => k === 'anchor' ? hasAnchor : rows[k].importance === 'must'), 'home']
 
-verdictLine(rows):                         -- deterministic sentence used in the UI and as LLM fallback
+verdictLine(rows):                         -- deterministic one-liner for the match column
   strong = kept rows with score >= 1.0, weak = kept rows with score < 0.7
   "Strong on {strong}. Weaker on {weak}."  -- omit a clause if its list is empty
+
+explainRows(rows):                         -- /shared/explain.ts, the profile page's four columns
+  keep   = kept rows with 0.9 <= score < 1.05   "Grocery at a similar reach (5 vs your 6)."
+  change = kept rows with 0.7 <= score < 0.9    "Fewer gyms nearby (1 vs your 2)."
+  giveUp = kept rows with score < 0.7           "Healthcare drops to 3 from your 9."
+  gain   = kept rows with candidate > baseline  "More restaurants & cafes (16 vs your 14)."
+  each list capped at 3 lines; verdict = "Your routine carries over almost intact." or "…; N gaps to weigh."
 ```
 
 Ranking: sort by `overall` desc; exclude `is_residential = false`; exclude the locality whose viewport contains the home point.
@@ -218,7 +228,7 @@ Desktop is asymmetric: map ~62% left, editorial column right.
 - **Ledger rows** replace the table: glyph, label, count as an oversized numeral, and a three-word importance control (`Must · Nice · Skip`) with the active word underlined in accent — not a segmented pill. Hover a row → its glyphs pulse. `worship` defaults to Skip.
 - **Correcting assumptions**: click a glyph → a small paper callout with a hairline border: `Nature's Basket · grocery · 400 m · Not mine ×`. Removing greys the glyph and decrements that category's count; the column says "Removed 1 · undo". Copy at the top of the ledger: *"These are here because they're within walking or short-ride reach of your home. Remove anything that isn't part of your life."*
 - **Sparse baseline**: an italic serif line inside the column, not a banner — *"Your area is quiet, so there's less to compare against. Matches will be lenient."*
-- **Routine thread**: derived from must-haves (+ anchor), typed in condensed caps with arrows and drawn on the map as one hairline path through the nearest instance of each node. Click a node to drop it; drag to reorder.
+- **Routine thread**: derived from must-haves (+ anchor), typed in condensed caps with arrows and drawn on the map as one hairline path through the nearest instance of each node. Click a node to drop it.
 
 **Movement III — Translation → the match**
 
@@ -246,7 +256,7 @@ The transition is the product's memorable moment. On "Translate to Pune →": th
 ```
 
 - **Verdict first, honestly.** If `equivalentFound`: *"Your life translates well to Pune."* + `Closest match · Aundh · 91`. Otherwise the headline is *"No locality in Pune fully matches your current setup."* followed by the closest match and its number, then `verdictLine` from §4.3. Never a forced recommendation; never judgmental.
-- **Ranking** uses real numerals 1–3 because rank is a true sequence. Entries are separated by hairlines, not cards: name in serif, a ≤10-word character line (LLM, fallback: sub-region), the overall as an oversized number, and a miniature routine thread with hollow nodes for what's missing.
+- **Ranking** uses real numerals 1–3 because rank is a true sequence. Entries are separated by hairlines, not cards: name in serif, a ≤10-word character line (from the seed list; fallback: sub-region), the overall as an oversized number, and a miniature routine thread with hollow nodes for what's missing.
 - **Map** draws the three viewports as thin outlines with locality names set in serif directly on the map. Hover an entry → outline thickens; click → detail page.
 - **Compare two**: pick two entries → the map splits into two panes; the same routine thread is drawn in each; between them the ledger shows *yours* and both candidates on a shared strip per category. This is the second signature interaction.
 
@@ -276,7 +286,7 @@ WHAT YOU'D KEEP        WHAT WOULD CHANGE     WHAT YOU'D GIVE UP     WHAT YOU'D G
 ```
 
 - The **range strip** replaces bars and graphs: one hairline per category, an accent tick for *yours*, an ink tick for *here*, a faint band marking the 70 threshold. Failing must-haves are set in accent with a small `must-have below 70` label — no red, no icons.
-- The four columns come from the structured explanation (§4.7), 2–4 terse lines each; deterministic fallback lines are generated from the rows when the model doesn't answer in time.
+- The four columns come from `explainRows` (§4.3), up to 3 terse lines each, computed on the client from the ledger.
 - Commute relationships (airport, anchor) are metadata in the eyebrow line, not chips.
 
 **Mobile**: same order, stacked. The map is a sticky ~45vh band at the top; columns scroll beneath it. The radius lens becomes a slider under the map; compare becomes a horizontal swipe between the two panes. No hamburger — the flow is linear.
@@ -316,32 +326,11 @@ Scale: 12 · 15 · 20 · 32 · 56 · 96 · 144. Oversized numbers (56–144) alw
 
 **Avoid** (from the brief, enforced in review): purple gradients, glow, glassmorphism, rounded-card grids, badges/pills, star ratings, dashboard charts, red pins, stock imagery, 3D illustration, floating assistant buttons.
 
-### 4.7 Explanation contract (Claude, `/server/src/explain.ts`)
-
-The ledger is the source of truth; Claude only phrases it. One call per top-3 locality, in parallel, through `@anthropic-ai/sdk`.
-
-- Model `claude-opus-5`; `thinking` omitted (adaptive by default), `output_config.effort: "low"`, `max_tokens: 600`. Structured output via `output_config.format` with the JSON schema below, so the client never parses prose.
-- Frozen system prompt with `cache_control: { type: "ephemeral" }`; the per-call user message is just the locality name, sub-region, `verdictLine`, and the row table.
-- Rules in the system prompt: refer only to categories present in the rows; never invent place names or rents; ≤14 words per line; no first person, no "AI", no hedging paragraphs.
-- Per-request timeout 4 s via `client.withOptions({ timeout: 4000 })`; check `stop_reason` before reading content; catch the SDK's typed errors most-specific-first (`RateLimitError` → `APIError` → connection). Any failure → `explanation: null` and the client renders deterministic lines from the rows. The page never waits on this call.
-- Include the server-side `fallbacks` parameter (`"default"` mode) so a policy decline is retried on another model inside the same call rather than dropping the explanation.
-
-```ts
-type Explanation = {
-  characterLine: string;   // ≤10 words, e.g. "Quiet, tree-lined, well-connected."
-  verdict: string;         // ≤18 words, e.g. "Closest match to your current routine; healthcare is the gap."
-  keep: string[];          // 1–3 lines
-  change: string[];        // 1–3 lines
-  giveUp: string[];        // 0–3 lines
-  gain: string[];          // 0–3 lines
-};
-```
-
 ## 5. Milestones
 
 **M0 — Scaffold (½ day)**
-- Monorepo with npm workspaces, TS configs, Vite client, Express server, Drizzle + Neon connection, `/shared` package wired into both.
-- `.env` handling: `GOOGLE_MAPS_SERVER_KEY`, `GOOGLE_MAPS_BROWSER_KEY` (referrer-restricted), `GOOGLE_MAPS_MAP_ID` (cloud style), `ANTHROPIC_API_KEY`, `DATABASE_URL`.
+- Monorepo with npm workspaces, TS configs, Vite client, Express server, Drizzle + SQLite (auto-migrated on open), `/shared` package wired into both.
+- One `.env` at the repo root: `GOOGLE_MAPS_SERVER_KEY`, `GOOGLE_MAPS_BROWSER_KEY` (referrer-restricted; Vite exposes it), `GOOGLE_MAPS_MAP_ID` (optional cloud style), `DATABASE_FILE`.
 - Fonts (Newsreader, Schibsted Grotesk, Archivo Narrow) and the token file in `/client/src/atlas/tokens.css`.
 
 **M1 — Precompute pipeline (1 day)**
@@ -354,19 +343,18 @@ type Explanation = {
 **M2 — Scoring + API (½ day)**
 - `/shared/scoring.ts` with unit tests for `categoryScore`, `overall`, `isEquivalent`, `verdictLine`, and edge cases (baseline 0, saturated 20/20, all don't-care).
 - `/shared/routine.ts` with tests for `deriveRoutine` (no must-haves, with/without anchor).
-- `/api/cities`, `/api/baseline` (with `places`), `/api/match` (without LLM/Routes).
+- `/api/cities`, `/api/baseline` (with `places`), `/api/match` (without Routes).
 
 **M3 — Atlas UI (1½ days)**
 - Custom Google Maps cloud style matching the `map-*` tokens; POI layer off. Glyph set and `AdvancedMarkerElement` renderer.
 - Movement I and II end-to-end on Pune: underline inputs, city row, ledger rows with importance control, prominence-by-importance, radius lens, place removal with undo, routine thread on the map.
 - Movement III: results column with honest verdict header, ranked entries with mini threads, viewport outlines with serif map labels.
-- Locality detail page: profile header, map fragment with recreated thread, range-strip ledger, four columns rendered from deterministic fallback lines.
+- Locality detail page: profile header, map fragment with recreated thread, range-strip ledger, four columns rendered from `explainRows`.
 - Mobile stacking with the sticky map band. Keyboard focus visible everywhere; `prefers-reduced-motion` respected.
 
 **M4 — Polish layer (1 day)**
 - The translation transition (desaturate → lift thread → fly → re-land node by node).
 - Compare-two split view.
-- Claude explanations per §4.7 with timeout + fallback; confirm model id against current docs at this step.
 - Routes API airport and anchor drive-times.
 - Sparse-baseline line, same-city exclusion, "no equivalent" state copy.
 
@@ -383,12 +371,13 @@ type Explanation = {
 | Geocoding returns a wrong/huge viewport for a locality name | Scan from center only (viewport is display-only); manual override field in seed JSON |
 | 20-result ceiling flattens dense categories | Radii shrunk for `food`/`grocery`; saturated-vs-saturated reads as 1.0 which is honest |
 | Google quota exhausted mid-demo | Precompute means live path is ~10 Places calls; keep a second API key as fallback |
-| Places caching ToS | Store `place_id`s + coordinates (≤30 days) + aggregate counts only; document as refreshable cache |
-| Claude call slow/fails on stage | 4 s timeout, ledger and deterministic lines always render, structured explanation swaps in if it arrives |
+| Places caching ToS | Only `place_id` caching is sanctioned; we also keep coordinates + aggregate counts as a knowing gray area for the hackathon, never names/ratings, rebuilt by `scan --force` |
 | Translation animation janks on stage laptop | Built on Maps camera `moveCamera` + CSS transitions only; reduced-motion path is the same end state and is the demo fallback |
 | Custom map style looks like a default map | Style reviewed against tokens at M3; POI layer off is non-negotiable |
 | Seed list misses a locality judges know | Re-running `scan` for one city is cheap; add names to JSON and rerun |
 
-## 7. Tunable constants (all in `/shared/scoring.ts`)
+## 7. Tunable constants (all in `/shared`)
 
-`RADII_M`, `SCORE_CAP = 1.2`, `WEIGHTS = { must: 3, nice: 1 }`, `EQUIV_OVERALL = 85`, `EQUIV_MUST_MIN = 70`, `RESIDENTIAL_MIN_HOUSING = 5`, `MEGASTORE_MIN_REVIEWS = 300`, `MEGASTORE_MIN_RATING = 4.0`, `SPARSE_BASELINE_TOTAL = 5`, `NEARBY_MAX_RESULTS = 20`, `LENS_DEFAULT_M = 1000`, `ROUTINE_ORDER`.
+`scoring.ts`: `RADII_M`, `SCORE_CAP = 1.2`, `WEIGHTS = { must: 3, nice: 1 }`, `EQUIV_OVERALL = 85`, `EQUIV_MUST_MIN = 70`, `RESIDENTIAL_MIN_HOUSING = 5`, `MEGASTORE_MIN_REVIEWS = 300`, `MEGASTORE_MIN_RATING = 4.0`, `SPARSE_BASELINE_TOTAL = 5`, `NEARBY_MAX_RESULTS = 20`, `LENS_DEFAULT_M = 1000`.
+`routine.ts`: `ROUTINE_ORDER`.
+`explain.ts`: `KEEP_MIN = 0.9`, `KEEP_MAX = 1.05`, `CHANGE_MIN = 0.7`, `EXPLAIN_MAX_LINES = 3`.

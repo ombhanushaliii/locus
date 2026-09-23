@@ -4,6 +4,6 @@ dist/
 .env
 .env.*
 !.env.example
-drizzle/meta/
+data/
 .DS_Store
 .shots/

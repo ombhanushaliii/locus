@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { CATEGORIES, CATEGORY_KEYS, type CategoryKey, type Importance } from '@locus/shared';
 import { CategoryGlyph, importanceToMode } from '../atlas/glyphs';
-import { PaperMap, type PaperPlace } from '../components/PaperMap';
+import { AtlasMap, type PaperPlace } from '../components/AtlasMap';
 import { RoutineThread } from '../components/RoutineThread';
 import { buildThread, formatKm, metersBetween } from '../lib/geo';
 import { useLocus } from '../state';
@@ -59,7 +59,7 @@ export function SetupPage() {
   return (
     <section className="setup">
       <div className="setup__map">
-        <PaperMap
+        <AtlasMap
           center={home}
           spanM={spanM}
           home={home}
@@ -100,7 +100,7 @@ export function SetupPage() {
               })()
             ) : null
           }
-        </PaperMap>
+        </AtlasMap>
         <p className="setup__mapnote meta">Scoring uses fixed per-category radii. The ring is a lens, not a setting.</p>
       </div>
 

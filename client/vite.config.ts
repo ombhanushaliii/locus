@@ -7,6 +7,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
+  // One .env at the repo root; only the browser key and map ID are exposed to the client.
+  envDir: path.resolve(here, '..'),
+  envPrefix: ['VITE_', 'GOOGLE_MAPS_BROWSER_KEY', 'GOOGLE_MAPS_MAP_ID'],
   resolve: {
     alias: { '@locus/shared': path.resolve(here, '../shared/src/index.ts') },
   },

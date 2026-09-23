@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import type { Suggestion } from '@locus/shared';
 import { suggestAddresses } from '../api';
-import type { Suggestion } from '../mock/data';
 import type { HomeInput } from '../state';
 
 interface Props {

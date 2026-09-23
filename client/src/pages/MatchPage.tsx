@@ -3,11 +3,10 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { CATEGORIES, CATEGORY_KEYS, displayOverall, isEquivalent, verdictLine, type MatchResult } from '@locus/shared';
 import { fetchMatch } from '../api';
 import { CategoryGlyph, importanceToMode } from '../atlas/glyphs';
-import { PaperMap, type Outline, type PaperPlace } from '../components/PaperMap';
+import { AtlasMap, type Outline, type PaperPlace } from '../components/AtlasMap';
 import { RangeStrip } from '../components/RangeStrip';
 import { RoutineThread } from '../components/RoutineThread';
 import { buildThread } from '../lib/geo';
-import { mockCharacterLine } from '../mock/data';
 import { useLocus } from '../state';
 
 type Phase = 'translating' | 'done';
@@ -34,14 +33,13 @@ export function MatchPage() {
       anchor: baseline.anchor ? { lat: baseline.anchor.lat, lng: baseline.anchor.lng } : undefined,
       cityId: city.id,
       categories: derived.categories,
-      routine: derived.routine,
     })
       .then((m) => alive && dispatch({ type: 'setMatch', match: m }))
       .catch(() => alive && setError('The match did not come back. Try again in a moment.'));
     return () => {
       alive = false;
     };
-  }, [baseline, city, state.match, derived.categories, derived.routine, dispatch]);
+  }, [baseline, city, state.match, derived.categories, dispatch]);
 
   /* Hold the translation on screen for its full length even when the match returns instantly. */
   useEffect(() => {
@@ -118,11 +116,11 @@ export function MatchPage() {
         {phase === 'translating' ? (
           <>
             <div className="scene scene--out">
-              <PaperMap center={baseline.home} spanM={2200} home={baseline.home} anchor={baseline.anchor} places={homePlaces} thread={homeThread} spokes />
+              <AtlasMap center={baseline.home} spanM={2200} home={baseline.home} anchor={baseline.anchor} places={homePlaces} thread={homeThread} spokes />
             </div>
             {top ? (
               <div className="scene scene--in">
-                <PaperMap center={top.locality.center} spanM={2200} places={focusPlaces} thread={focusThread} drawThread />
+                <AtlasMap center={top.locality.center} spanM={2200} places={focusPlaces} thread={focusThread} drawThread />
               </div>
             ) : null}
             <p className="match__translating display display--m display--i">Translating your life to {city.name}…</p>
@@ -131,7 +129,7 @@ export function MatchPage() {
           <div className="split">
             {[cmpA, cmpB].map((r) => (
               <div key={r.locality.id} className="split__pane">
-                <PaperMap
+                <AtlasMap
                   center={r.locality.center}
                   spanM={2000}
                   places={r.points.map((p, i) => ({ id: `${r.locality.id}-${i}`, lat: p.lat, lng: p.lng, category: p.category, mode: importanceToMode(state.importance[p.category]) }))}
@@ -142,7 +140,7 @@ export function MatchPage() {
             ))}
           </div>
         ) : (
-          <PaperMap
+          <AtlasMap
             center={cityCenter}
             spanM={spanM}
             outlines={outlines}
@@ -197,7 +195,7 @@ export function MatchPage() {
                       {r.locality.name}
                       {r.locality.subRegion ? <span className="meta ranking__sub"> {r.locality.subRegion}</span> : null}
                     </button>
-                    <p className="display display--i ranking__char">{mockCharacterLine(r.locality.id) ?? r.locality.subRegion ?? ''}</p>
+                    <p className="display display--i ranking__char">{r.locality.character ?? r.locality.subRegion ?? ''}</p>
                     <RoutineThread nodes={buildThread(derived.routine, r.locality.center, baseline.anchor, r.points)} size="s" />
                     <p className="meta ranking__meta">
                       {isEquivalent(r.rows, r.overall) ? 'Equivalent to your setup' : 'Closest available'} · {r.airportMinutes ?? '–'} min to airport

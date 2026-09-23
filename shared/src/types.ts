@@ -1,6 +1,5 @@
 import type { CategoryKey, Importance } from './categories.js';
 import type { ScoreRow } from './scoring.js';
-import type { RoutineNode } from './routine.js';
 
 export interface LatLng {
   lat: number;
@@ -16,6 +15,12 @@ export interface CityInfo {
   id: string;
   name: string;
   subRegions?: string[];
+}
+
+export interface Suggestion {
+  placeId: string;
+  label: string;
+  secondary: string;
 }
 
 export interface PlacePoint extends LatLng {
@@ -42,22 +47,14 @@ export interface MatchRequest {
   anchor?: LatLng;
   cityId: string;
   categories: { category: CategoryKey; baselineCount: number; importance: Importance }[];
-  routine: RoutineNode[];
-}
-
-export interface Explanation {
-  characterLine: string;
-  verdict: string;
-  keep: string[];
-  change: string[];
-  giveUp: string[];
-  gain: string[];
 }
 
 export interface LocalitySummary {
   id: number;
   name: string;
   subRegion?: string;
+  /** Hand-written in the seed list, e.g. "Quiet, tree-lined, well-connected." */
+  character?: string;
   center: LatLng;
   viewport: Viewport;
 }
@@ -69,7 +66,6 @@ export interface MatchResult {
   points: (LatLng & { category: CategoryKey })[];
   airportMinutes: number | null;
   anchorMinutes?: number | null;
-  explanation: Explanation | null;
 }
 
 export interface MatchResponse {

@@ -3,23 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./db": "./src/db/index.ts",
+    "./google": "./src/google.ts",
+    "./scan": "./src/scan.ts"
+  },
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../.env src/index.ts",
     "build": "tsc -b",
     "start": "node --env-file-if-exists=../.env dist/index.js",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.60.0",
     "@locus/shared": "*",
-    "@neondatabase/serverless": "^1.0.0",
+    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.5",
     "drizzle-orm": "^0.44.0",
     "express": "^5.1.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.13.4",

@@ -88,7 +88,7 @@ function joinList(labels: string[], more = 0): string {
   return all.slice(0, -1).join(', ') + ', and ' + all[all.length - 1];
 }
 
-/** Deterministic one-liner used in the UI and as the LLM fallback. */
+/** Deterministic one-liner for the match column. */
 export function verdictLine(rows: readonly ScoreRow[]): string {
   const kept = keptRows(rows);
   const name = (r: ScoreRow) => CATEGORIES[r.category].label.toLowerCase();
