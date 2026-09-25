@@ -154,7 +154,7 @@
   inset: 0;
   display: block;
 }
-/* On a Google map the drawing floats above the tiles; only marks catch the pointer. */
+/* On the tile map the drawing floats above the tiles; only marks catch the pointer. */
 .papermap__svg--overlay {
   pointer-events: none;
   z-index: 1;
@@ -164,12 +164,37 @@
 .papermap__svg--overlay .lens__handle {
   pointer-events: auto;
 }
-.papermap--google .papermap__overlay {
+.papermap__basemap {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+.papermap--libre.is-loaded .papermap__basemap {
+  opacity: 1;
+}
+.papermap--libre .papermap__overlay {
   z-index: 2;
 }
-.papermap--google .gm-style a[href],
-.papermap--google .gmnoprint {
-  opacity: 0.55;
+.papermap--libre .maplibregl-canvas {
+  outline: none;
+}
+.papermap--libre .maplibregl-ctrl-bottom-right {
+  z-index: 3;
+}
+.papermap--libre .maplibregl-ctrl-attrib {
+  font: 10px/1.4 var(--font-meta);
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+  background: rgba(239, 235, 227, 0.85);
+  border-radius: 0;
+}
+.papermap--libre .maplibregl-ctrl-attrib a {
+  color: inherit;
+}
+.papermap--libre .maplibregl-ctrl-attrib-button {
+  filter: grayscale(1);
+  opacity: 0.6;
 }
 .papermap__overlay {
   position: absolute;
@@ -936,5 +961,51 @@ button.routine__btn:hover {
 @media (max-width: 900px) {
   .setup__mapnote {
     display: none;
+  }
+}
+
+/* ---- v2 additions ---------------------------------------------------- */
+
+.ledger-group {
+  padding: 6px 0 2px;
+}
+.ledger-group__title {
+  padding: 10px 0 4px;
+  color: var(--ink-faint);
+}
+.ledger-group + .ledger-group {
+  border-top: var(--hair);
+}
+.callout__name {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+.address__list .address__empty {
+  cursor: default;
+  font-style: italic;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+.address__list .address__empty:hover {
+  background: transparent;
+}
+.cities--many .cities__item {
+  font-size: clamp(1.25rem, 2.2vw, 1.75rem);
+}
+.addresses__coverage {
+  margin-top: 14px;
+  color: var(--ink-faint);
+}
+
+/* Desktop: the map is a fixed viewport-height panel; the editorial column scrolls beside it. */
+@media (min-width: 901px) {
+  .setup__map,
+  .match__map {
+    position: sticky;
+    top: var(--topbar-h);
+    height: calc(100vh - var(--topbar-h));
+    min-height: 0;
+    align-self: start;
   }
 }

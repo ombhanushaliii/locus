@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly GOOGLE_MAPS_BROWSER_KEY?: string;
-  readonly GOOGLE_MAPS_MAP_ID?: string;
+  /** '1' forces sample data; '0' forces the API. Default: API in dev, sample data in production builds. */
   readonly VITE_MOCK?: string;
+  /** '1' draws the SVG paper map instead of vector tiles. */
+  readonly VITE_PAPER?: string;
 }

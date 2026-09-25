@@ -1,4 +1,4 @@
-import { CATEGORIES, ROUTINE_LABELS, type CategoryKey, type RoutineNode } from '@locus/shared';
+import { CATEGORIES, routineLabel, type CategoryKey, type RoutineNode } from '@locus/shared';
 import { GlyphIcon, HomeGlyph } from '../atlas/glyphs';
 import type { ThreadNode } from '../lib/geo';
 
@@ -19,7 +19,7 @@ export function RoutineThread({ nodes, size = 'm', onToggle, dropped = [] }: Pro
     <ol className={`routine routine--${size}`} aria-label="Your routine">
       {items.map((n, i) => {
         const missing = n.point === null;
-        const label = ROUTINE_LABELS[n.node];
+        const label = routineLabel(n.node);
         const glyph =
           n.node === 'home' ? (
             <HomeGlyph size={size === 'm' ? 14 : 10} />

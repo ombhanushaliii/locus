@@ -6,7 +6,7 @@ import type { ThreadNode } from '../lib/geo';
 /**
  * The atlas drawing: glyphs, spokes, lens, routine thread, locality outlines.
  * Pure SVG driven by a Projector, so the same layer sits on the SVG paper map
- * and on top of a Google map.
+ * and on top of the vector-tile map.
  */
 
 export interface PaperPlace extends LatLng {

@@ -1,0 +1,4 @@
+# Cloudflare Pages project. `npm run deploy` builds the client and publishes it as trylocus.pages.dev.
+name = "trylocus"
+pages_build_output_dir = "client/dist"
+compatibility_date = "2026-09-01"

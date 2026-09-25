@@ -1,14 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildRows,
-  categoryScore,
-  displayOverall,
-  isEquivalent,
-  isSparse,
-  overall,
-  verdictLine,
-  type ScoreRow,
-} from './scoring.js';
+import { buildRows, categoryScore, displayOverall, isEquivalent, isSparse, overall, verdictLine, type ScoreRow } from './scoring.js';
 
 const row = (p: Partial<ScoreRow> & Pick<ScoreRow, 'category'>): ScoreRow => {
   const baseline = p.baseline ?? 5;
@@ -43,9 +34,8 @@ describe('overall', () => {
   it('weights must 3 and nice 1', () => {
     const rows = [
       row({ category: 'grocery', importance: 'must', baseline: 10, candidate: 10 }),
-      row({ category: 'food', importance: 'nice', baseline: 10, candidate: 6 }),
+      row({ category: 'restaurant', importance: 'nice', baseline: 10, candidate: 6 }),
     ];
-    // (3*1 + 1*0.6) / 4 = 0.9
     expect(overall(rows)).toBe(90);
   });
   it('excludes dont-care rows', () => {
@@ -69,15 +59,15 @@ describe('isEquivalent', () => {
   it('requires overall >= 85 and every must >= 70', () => {
     const rows = [
       row({ category: 'grocery', importance: 'must', baseline: 10, candidate: 9 }),
-      row({ category: 'transit', importance: 'must', baseline: 2, candidate: 2 }),
+      row({ category: 'rail', importance: 'must', baseline: 2, candidate: 2 }),
     ];
     expect(isEquivalent(rows, overall(rows))).toBe(true);
   });
   it('fails when a must-have is under 70 even with high overall', () => {
     const rows = [
       row({ category: 'grocery', importance: 'must', baseline: 1, candidate: 20 }),
-      row({ category: 'healthcare', importance: 'must', baseline: 10, candidate: 6 }),
-      row({ category: 'food', importance: 'nice', baseline: 1, candidate: 20 }),
+      row({ category: 'hospital', importance: 'must', baseline: 10, candidate: 6 }),
+      row({ category: 'restaurant', importance: 'nice', baseline: 1, candidate: 20 }),
     ];
     expect(overall(rows)).toBeGreaterThanOrEqual(85);
     expect(isEquivalent(rows, overall(rows))).toBe(false);
@@ -85,9 +75,8 @@ describe('isEquivalent', () => {
   it('ignores nice-to-have rows for the must threshold', () => {
     const rows = [
       row({ category: 'grocery', importance: 'must', baseline: 5, candidate: 5 }),
-      row({ category: 'food', importance: 'nice', baseline: 10, candidate: 3 }),
+      row({ category: 'restaurant', importance: 'nice', baseline: 10, candidate: 3 }),
     ];
-    // (3*1 + 1*0.3)/4 = 0.825 -> 83 -> not equivalent by overall
     expect(isEquivalent(rows, overall(rows))).toBe(false);
   });
 });
@@ -104,24 +93,24 @@ describe('buildRows + verdictLine', () => {
     const rows = buildRows(
       [
         { category: 'grocery', baselineCount: 6, importance: 'must' },
-        { category: 'fitness', baselineCount: 2, importance: 'must' },
-        { category: 'food', baselineCount: 14, importance: 'nice' },
+        { category: 'gym', baselineCount: 2, importance: 'must' },
+        { category: 'restaurant', baselineCount: 14, importance: 'nice' },
       ],
-      { grocery: 6, fitness: 1, food: 16 },
+      { grocery: 6, gym: 1, restaurant: 16 },
     );
     expect(rows.map((r) => r.candidate)).toEqual([6, 1, 16]);
-    expect(verdictLine(rows)).toBe('Strong on restaurants & cafes and grocery. Weaker on gym / fitness.');
+    expect(verdictLine(rows)).toBe('Strong on restaurants and daily groceries. Weaker on gyms.');
   });
   it('uses the Oxford comma for three or more', () => {
     const rows = buildRows(
       [
         { category: 'grocery', baselineCount: 1, importance: 'must' },
-        { category: 'transit', baselineCount: 1, importance: 'must' },
-        { category: 'food', baselineCount: 1, importance: 'must' },
+        { category: 'rail', baselineCount: 1, importance: 'must' },
+        { category: 'restaurant', baselineCount: 1, importance: 'must' },
       ],
-      { grocery: 2, transit: 2, food: 2 },
+      { grocery: 2, rail: 2, restaurant: 2 },
     );
-    expect(verdictLine(rows)).toBe('Strong on grocery, public transport, and restaurants & cafes.');
+    expect(verdictLine(rows)).toBe('Strong on daily groceries, metro & rail stations, and restaurants.');
   });
   it('has a neutral line when nothing is strong or weak', () => {
     const rows = buildRows([{ category: 'grocery', baselineCount: 10, importance: 'must' }], { grocery: 8 });
@@ -134,13 +123,13 @@ describe('verdictLine capping', () => {
     const rows = buildRows(
       [
         { category: 'grocery', baselineCount: 1, importance: 'must' },
-        { category: 'transit', baselineCount: 1, importance: 'must' },
-        { category: 'food', baselineCount: 1, importance: 'nice' },
-        { category: 'education', baselineCount: 1, importance: 'nice' },
-        { category: 'entertainment', baselineCount: 1, importance: 'nice' },
+        { category: 'rail', baselineCount: 1, importance: 'must' },
+        { category: 'restaurant', baselineCount: 1, importance: 'nice' },
+        { category: 'school', baselineCount: 1, importance: 'nice' },
+        { category: 'cinema', baselineCount: 1, importance: 'nice' },
       ],
-      { grocery: 1, transit: 1, food: 1, education: 1, entertainment: 1 },
+      { grocery: 1, rail: 1, restaurant: 1, school: 1, cinema: 1 },
     );
-    expect(verdictLine(rows)).toBe('Strong on grocery, public transport, restaurants & cafes, and 2 more.');
+    expect(verdictLine(rows)).toBe('Strong on daily groceries, metro & rail stations, restaurants, and 2 more.');
   });
 });

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
-import { CATEGORIES, CATEGORY_KEYS, displayOverall, isEquivalent, verdictLine, type MatchResult } from '@locus/shared';
-import { fetchMatch } from '../api';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { CATEGORIES, CATEGORY_KEYS, characterLine, cityMedians, displayOverall, isEquivalent, matchCity, verdictLine, type MatchResult } from '@locus/shared';
 import { CategoryGlyph, importanceToMode } from '../atlas/glyphs';
 import { AtlasMap, type Outline, type PaperPlace } from '../components/AtlasMap';
 import { RangeStrip } from '../components/RangeStrip';
 import { RoutineThread } from '../components/RoutineThread';
+import { loadCity } from '../data';
 import { buildThread } from '../lib/geo';
 import { useLocus } from '../state';
 
@@ -17,6 +17,7 @@ const TRANSLATE_MS = REDUCED ? 0 : 1900;
 export function MatchPage() {
   const { state, dispatch, derived } = useLocus();
   const nav = useNavigate();
+  const openFirst = new URLSearchParams(useLocation().search).get('open') === '1';
   const [phase, setPhase] = useState<Phase>(state.match ? 'done' : 'translating');
   const [error, setError] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<number | null>(null);
@@ -28,20 +29,25 @@ export function MatchPage() {
   useEffect(() => {
     if (!baseline || !city || state.match) return;
     let alive = true;
-    fetchMatch({
-      home: { lat: baseline.home.lat, lng: baseline.home.lng },
-      anchor: baseline.anchor ? { lat: baseline.anchor.lat, lng: baseline.anchor.lng } : undefined,
-      cityId: city.id,
-      categories: derived.categories,
-    })
-      .then((m) => alive && dispatch({ type: 'setMatch', match: m }))
-      .catch(() => alive && setError('The match did not come back. Try again in a moment.'));
+    loadCity(city.id)
+      .then((data) => {
+        if (!alive) return;
+        const medians = cityMedians(data.localities);
+        const m = matchCity(derived.categories, data, {
+          excludeNear: baseline.home.cityId === city.id ? baseline.home : undefined,
+          anchor: baseline.anchor ?? null,
+          characterFor: (l) => characterLine(l, medians),
+        });
+        dispatch({ type: 'setMatch', match: m });
+        if (openFirst && m.results[0]) nav(`/match/${m.results[0].locality.id}`, { replace: true });
+      })
+      .catch(() => alive && setError('That city’s data did not load. Try again in a moment.'));
     return () => {
       alive = false;
     };
-  }, [baseline, city, state.match, derived.categories, dispatch]);
+  }, [baseline, city, state.match, derived.categories, dispatch, nav, openFirst]);
 
-  /* Hold the translation on screen for its full length even when the match returns instantly. */
+  /* Hold the translation on screen for its full length even when the match is instant. */
   useEffect(() => {
     if (!state.match || phase === 'done') return;
     const wait = Math.max(0, TRANSLATE_MS - (performance.now() - startedAt.current));
@@ -54,14 +60,12 @@ export function MatchPage() {
   const homePt = baseline?.home ?? { lat: 0, lng: 0 };
   const anchorPt = baseline?.anchor ?? null;
 
-  /* Home scene (fades out) */
   const homePlaces: PaperPlace[] = useMemo(
-    () => derived.places.map((p) => ({ id: p.placeId, lat: p.lat, lng: p.lng, category: p.category, mode: importanceToMode(state.importance[p.category]) })),
+    () => derived.places.map((p) => ({ id: `${p.placeId}:${p.category}`, lat: p.lat, lng: p.lng, category: p.category, mode: importanceToMode(state.importance[p.category]) })),
     [derived.places, state.importance],
   );
-  const homeThread = useMemo(() => buildThread(derived.routine, homePt, anchorPt, derived.places), [derived.routine, homePt, anchorPt, derived.places]);
+  const homeThread = useMemo(() => buildThread(derived.routine, homePt, null, derived.places), [derived.routine, homePt, derived.places]);
 
-  /* Destination scene */
   const cityCenter = useMemo(() => {
     if (!match?.results.length) return homePt;
     const lat = match.results.reduce((s, r) => s + r.locality.center.lat, 0) / match.results.length;
@@ -81,30 +85,21 @@ export function MatchPage() {
   );
 
   const focus = useMemo(() => match?.results.find((r) => r.locality.id === (hoverId ?? top?.locality.id)) ?? top, [match, hoverId, top]);
-  const focusThread = useMemo(
-    () => (focus ? buildThread(derived.routine, focus.locality.center, anchorPt, focus.points) : []),
-    [focus, derived.routine, anchorPt],
-  );
+  const focusThread = useMemo(() => (focus ? buildThread(derived.routine, focus.locality.center, anchorPt, focus.points) : []), [focus, derived.routine, anchorPt]);
   const focusPlaces: PaperPlace[] = useMemo(
-    () =>
-      (focus?.points ?? []).map((p, i) => ({
-        id: `${focus!.locality.id}-${i}`,
-        lat: p.lat,
-        lng: p.lng,
-        category: p.category,
-        mode: state.importance[p.category] === 'must' ? 'fill' : state.importance[p.category] === 'nice' ? 'stroke' : 'faint',
-      })),
+    () => (focus?.points ?? []).map((p) => ({ id: `${p.id}:${p.category}`, lat: p.lat, lng: p.lng, category: p.category, mode: importanceToMode(state.importance[p.category]) })),
     [focus, state.importance],
   );
 
   const spanM = useMemo(() => {
     if (!match?.results.length) return 2200;
     let max = 2200;
-    for (const r of match.results) max = Math.max(max, Math.hypot((r.locality.center.lat - cityCenter.lat) * 111_320, (r.locality.center.lng - cityCenter.lng) * 111_320 * Math.cos((cityCenter.lat * Math.PI) / 180)) + 2600);
+    for (const r of match.results) {
+      max = Math.max(max, Math.hypot((r.locality.center.lat - cityCenter.lat) * 111_320, (r.locality.center.lng - cityCenter.lng) * 111_320 * Math.cos((cityCenter.lat * Math.PI) / 180)) + 2600);
+    }
     return max;
   }, [match, cityCenter]);
 
-  /* Compare mode */
   const compare = state.compare;
   const [cmpA, cmpB] = compare ? compare.map((id) => match?.results.find((r) => r.locality.id === id)) : [undefined, undefined];
 
@@ -116,7 +111,7 @@ export function MatchPage() {
         {phase === 'translating' ? (
           <>
             <div className="scene scene--out">
-              <AtlasMap center={baseline.home} spanM={2200} home={baseline.home} anchor={baseline.anchor} places={homePlaces} thread={homeThread} spokes />
+              <AtlasMap center={baseline.home} spanM={2200} home={baseline.home} places={homePlaces} thread={homeThread} spokes />
             </div>
             {top ? (
               <div className="scene scene--in">
@@ -132,23 +127,15 @@ export function MatchPage() {
                 <AtlasMap
                   center={r.locality.center}
                   spanM={2000}
-                  places={r.points.map((p, i) => ({ id: `${r.locality.id}-${i}`, lat: p.lat, lng: p.lng, category: p.category, mode: importanceToMode(state.importance[p.category]) }))}
-                  thread={buildThread(derived.routine, r.locality.center, baseline.anchor, r.points)}
+                  places={r.points.map((p) => ({ id: `${p.id}:${p.category}`, lat: p.lat, lng: p.lng, category: p.category, mode: importanceToMode(state.importance[p.category]) }))}
+                  thread={buildThread(derived.routine, r.locality.center, anchorPt, r.points)}
                 />
                 <p className="split__name display display--s">{r.locality.name}</p>
               </div>
             ))}
           </div>
         ) : (
-          <AtlasMap
-            center={cityCenter}
-            spanM={spanM}
-            outlines={outlines}
-            onOutlineClick={(id) => nav(`/match/${id}`)}
-            onOutlineHover={setHoverId}
-            places={focusPlaces}
-            thread={focusThread}
-          />
+          <AtlasMap center={cityCenter} spanM={spanM} outlines={outlines} onOutlineClick={(id) => nav(`/match/${id}`)} onOutlineHover={setHoverId} places={focusPlaces} thread={focusThread} />
         )}
       </div>
 
@@ -183,23 +170,19 @@ export function MatchPage() {
             <hr className="rule rule--strong" />
             <ol className="ranking">
               {match.results.map((r, i) => (
-                <li
-                  key={r.locality.id}
-                  className={`ranking__item${hoverId === r.locality.id ? ' is-hover' : ''}`}
-                  onMouseEnter={() => setHoverId(r.locality.id)}
-                  onMouseLeave={() => setHoverId(null)}
-                >
+                <li key={r.locality.id} className={`ranking__item${hoverId === r.locality.id ? ' is-hover' : ''}`} onMouseEnter={() => setHoverId(r.locality.id)} onMouseLeave={() => setHoverId(null)}>
                   <span className="ranking__n numeral">{i + 1}</span>
                   <div className="ranking__body">
                     <button type="button" className="ranking__name display display--s" onClick={() => nav(`/match/${r.locality.id}`)}>
                       {r.locality.name}
                       {r.locality.subRegion ? <span className="meta ranking__sub"> {r.locality.subRegion}</span> : null}
                     </button>
-                    <p className="display display--i ranking__char">{r.locality.character ?? r.locality.subRegion ?? ''}</p>
-                    <RoutineThread nodes={buildThread(derived.routine, r.locality.center, baseline.anchor, r.points)} size="s" />
+                    <p className="display display--i ranking__char">{r.locality.character ?? ''}</p>
+                    <RoutineThread nodes={buildThread(derived.routine, r.locality.center, anchorPt, r.points)} size="s" />
                     <p className="meta ranking__meta">
-                      {isEquivalent(r.rows, r.overall) ? 'Equivalent to your setup' : 'Closest available'} · {r.airportMinutes ?? '–'} min to airport
-                      {r.anchorMinutes != null ? ` · ${r.anchorMinutes} min to work` : ''}
+                      {isEquivalent(r.rows, r.overall) ? 'Equivalent to your setup' : 'Closest available'}
+                      {r.airportMinutes != null ? ` · ~${r.airportMinutes} min to airport` : ''}
+                      {r.anchorMinutes != null ? ` · ~${r.anchorMinutes} min to work` : ''}
                     </p>
                   </div>
                   <span className="ranking__score numeral">{displayOverall(r.overall)}</span>
@@ -207,11 +190,7 @@ export function MatchPage() {
               ))}
             </ol>
             {match.results.length >= 2 ? (
-              <button
-                type="button"
-                className="action action--quiet match__compare"
-                onClick={() => dispatch({ type: 'setCompare', compare: [match.results[0]!.locality.id, match.results[1]!.locality.id] })}
-              >
+              <button type="button" className="action action--quiet match__compare" onClick={() => dispatch({ type: 'setCompare', compare: [match.results[0]!.locality.id, match.results[1]!.locality.id] })}>
                 Compare the top two <span aria-hidden>→</span>
               </button>
             ) : null}
@@ -232,8 +211,12 @@ function CompareColumn({ a, b, onClose }: { a: MatchResult; b: MatchResult; onCl
       </h1>
       <div className="cmp-head">
         <span className="meta">Yours</span>
-        <span className="meta meta--ink">{a.locality.name} · {displayOverall(a.overall)}</span>
-        <span className="meta meta--ink">{b.locality.name} · {displayOverall(b.overall)}</span>
+        <span className="meta meta--ink">
+          {a.locality.name} · {displayOverall(a.overall)}
+        </span>
+        <span className="meta meta--ink">
+          {b.locality.name} · {displayOverall(b.overall)}
+        </span>
       </div>
       <hr className="rule rule--strong" />
       <ul className="ledger ledger--cmp">

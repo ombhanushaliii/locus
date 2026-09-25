@@ -59,7 +59,9 @@ export function GlyphIcon({ glyph, mode = 'stroke', size, color = 'currentColor'
   );
 }
 
-function renderShape(glyph: Glyph, p: { stroke: string; fill: string; sw: number; dash?: string }) {
+type P = { stroke: string; fill: string; sw: number; dash?: string };
+
+function renderShape(glyph: Glyph, p: P) {
   const filled = p.fill !== 'none';
   const common = {
     stroke: p.stroke,
@@ -70,11 +72,36 @@ function renderShape(glyph: Glyph, p: { stroke: string; fill: string; sw: number
     strokeLinecap: 'butt' as const,
     vectorEffect: 'non-scaling-stroke' as const,
   };
+  const line = { stroke: p.stroke, strokeWidth: p.sw, strokeDasharray: p.dash, fill: 'none' };
   switch (glyph) {
     case 'square':
       return <rect x="1.5" y="1.5" width="9" height="9" {...common} />;
+    case 'rect':
+      return <rect x="1" y="3.5" width="10" height="5" {...common} />;
+    case 'double-square':
+      return (
+        <>
+          <rect x="1" y="1" width="7" height="7" {...common} fill={filled ? p.fill : 'none'} />
+          <rect x="4" y="4" width="7" height="7" {...common} fill="none" />
+        </>
+      );
+    case 'grid':
+      return (
+        <>
+          <rect x="1.5" y="1.5" width="9" height="9" {...common} fill="none" />
+          <path d="M6 1.5v9M1.5 6h9" {...line} />
+          {filled ? <rect x="1.5" y="1.5" width="4.5" height="4.5" fill={p.fill} /> : null}
+          {filled ? <rect x="6" y="6" width="4.5" height="4.5" fill={p.fill} /> : null}
+        </>
+      );
     case 'hexagon':
       return <polygon points="6,1 10.33,3.5 10.33,8.5 6,11 1.67,8.5 1.67,3.5" {...common} />;
+    case 'pentagon':
+      return <polygon points="6,1 10.75,4.45 8.94,10.05 3.06,10.05 1.25,4.45" {...common} />;
+    case 'cross':
+      return <path d="M6 1.5v9M1.5 6h9" stroke={p.stroke} strokeWidth={filled ? p.sw * 2.2 : p.sw * 1.4} strokeDasharray={p.dash} fill="none" />;
+    case 'x':
+      return <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke={p.stroke} strokeWidth={filled ? p.sw * 2 : p.sw * 1.3} strokeDasharray={p.dash} fill="none" />;
     case 'cross-circle':
       return (
         <>
@@ -83,10 +110,42 @@ function renderShape(glyph: Glyph, p: { stroke: string; fill: string; sw: number
           <path d="M6 3.2v5.6M3.2 6h5.6" stroke={p.stroke} strokeWidth={filled ? p.sw * 1.5 : p.sw} strokeDasharray={p.dash} />
         </>
       );
+    case 'cross-square':
+      return (
+        <>
+          <rect x="1.5" y="1.5" width="9" height="9" {...common} fill={filled ? p.fill : 'none'} />
+          <path d="M6 3.2v5.6M3.2 6h5.6" stroke={filled ? 'var(--paper)' : p.stroke} strokeWidth={p.sw * 1.4} strokeDasharray={p.dash} />
+        </>
+      );
     case 'diamond':
       return <polygon points="6,1 11,6 6,11 1,6" {...common} />;
+    case 'diamond-dot':
+      return (
+        <>
+          <polygon points="6,1 11,6 6,11 1,6" {...common} fill="none" />
+          <circle cx="6" cy="6" r={filled ? 2 : 1.2} fill={p.stroke} />
+        </>
+      );
+    case 'tree':
+      return (
+        <>
+          <circle cx="6" cy="4.5" r="3.5" {...common} />
+          <path d="M6 8v3.5" {...line} strokeWidth={p.sw * 1.3} />
+        </>
+      );
+    case 'ring':
+      return <circle cx="6" cy="6" r="4" {...common} fill="none" strokeWidth={filled ? p.sw * 2.4 : p.sw} />;
     case 'dot':
       return <circle cx="6" cy="6" r="4" {...common} />;
+    case 'half-circle':
+      return (
+        <>
+          <path d="M1.5 8.5a4.5 4.5 0 0 1 9 0z" {...common} />
+          <path d="M1.5 8.5h9" {...line} />
+        </>
+      );
+    case 'crescent':
+      return <path d="M8.5 1.6A5 5 0 1 0 10.4 8.2 4 4 0 1 1 8.5 1.6z" {...common} />;
     case 'bars':
       return (
         <>
@@ -94,8 +153,21 @@ function renderShape(glyph: Glyph, p: { stroke: string; fill: string; sw: number
           <rect x="1.5" y="7" width="9" height="2" {...common} />
         </>
       );
+    case 'chevron':
+      return <polyline points="2,8.5 6,3.5 10,8.5" {...line} strokeWidth={filled ? p.sw * 2.2 : p.sw * 1.3} strokeLinejoin="miter" />;
+    case 'teardrop':
+      return <path d="M6 1.2C7.6 3.8 9.6 5.6 9.6 7.6a3.6 3.6 0 1 1-7.2 0C2.4 5.6 4.4 3.8 6 1.2z" {...common} />;
+    case 'triangle-small':
+      return <polygon points="6,3 9.5,9.5 2.5,9.5" {...common} />;
     case 'triangle':
       return <polygon points="6,1.5 10.75,10.25 1.25,10.25" {...common} />;
+    case 'triangle-base':
+      return (
+        <>
+          <polygon points="6,1.2 10.5,8.2 1.5,8.2" {...common} />
+          <path d="M1 10.8h10" {...line} />
+        </>
+      );
     case 'asterisk':
       return (
         <path
@@ -106,11 +178,13 @@ function renderShape(glyph: Glyph, p: { stroke: string; fill: string; sw: number
           fill="none"
         />
       );
-    case 'half-circle':
+    case 'quad':
       return (
         <>
-          <circle cx="6" cy="6" r="4.75" {...common} fill="none" />
-          <path d="M6 1.25a4.75 4.75 0 0 1 0 9.5z" fill={p.stroke} opacity={filled ? 1 : 0.55} />
+          <circle cx="3.5" cy="3.5" r="1.8" {...common} />
+          <circle cx="8.5" cy="3.5" r="1.8" {...common} />
+          <circle cx="3.5" cy="8.5" r="1.8" {...common} />
+          <circle cx="8.5" cy="8.5" r="1.8" {...common} />
         </>
       );
   }

@@ -1,8 +1,6 @@
-import { CATEGORIES, type CategoryKey, type Importance } from './categories.js';
+import { CATEGORIES, CATEGORY_KEYS, reachM, type CategoryKey, type Importance } from './categories.js';
 
-export const RADII_M: Record<CategoryKey, number> = Object.fromEntries(
-  Object.values(CATEGORIES).map((c) => [c.key, c.radiusM]),
-) as Record<CategoryKey, number>;
+export const RADII_M: Record<CategoryKey, number> = Object.fromEntries(CATEGORY_KEYS.map((k) => [k, reachM(k)])) as Record<CategoryKey, number>;
 
 export const SCORE_CAP = 1.2;
 export const WEIGHTS: Record<Exclude<Importance, 'none'>, number> = { must: 3, nice: 1 };
@@ -12,7 +10,7 @@ export const RESIDENTIAL_MIN_HOUSING = 5;
 export const MEGASTORE_MIN_REVIEWS = 300;
 export const MEGASTORE_MIN_RATING = 4.0;
 export const SPARSE_BASELINE_TOTAL = 5;
-export const NEARBY_MAX_RESULTS = 20;
+export const NEARBY_MAX_RESULTS = 40;
 export const LENS_DEFAULT_M = 1000;
 /** Display thresholds for verdict language, as fractions of baseline. */
 export const STRONG_MIN = 1.0;

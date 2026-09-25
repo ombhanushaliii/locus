@@ -1,4 +1,4 @@
-import { CATEGORIES, metersBetween, type CategoryKey, type LatLng, type RoutineNode } from '@locus/shared';
+import { metersBetween, reachM, type CategoryKey, type LatLng, type RoutineNode } from '@locus/shared';
 
 export { metersBetween };
 
@@ -36,7 +36,7 @@ export function buildThread(
   return routine.map((node) => {
     if (node === 'home') return { node, point: origin };
     if (node === 'anchor') return { node, point: anchor ?? null };
-    const radius = CATEGORIES[node].radiusM;
+    const radius = reachM(node as CategoryKey);
     let best: LatLng | null = null;
     let bestD = Infinity;
     for (const p of points) {

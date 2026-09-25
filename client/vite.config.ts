@@ -7,14 +7,14 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
-  // One .env at the repo root; only the browser key and map ID are exposed to the client.
+  // One .env at the repo root; only VITE_* values reach the browser.
   envDir: path.resolve(here, '..'),
-  envPrefix: ['VITE_', 'GOOGLE_MAPS_BROWSER_KEY', 'GOOGLE_MAPS_MAP_ID'],
   resolve: {
     alias: { '@locus/shared': path.resolve(here, '../shared/src/index.ts') },
   },
+  // MapLibre's worker is an ES module with its own imports; bundle it as one.
+  worker: { format: 'es' },
   server: {
     port: 5173,
-    proxy: { '/api': 'http://localhost:3001' },
   },
 });

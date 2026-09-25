@@ -5,7 +5,7 @@
     "rootDir": "..",
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client", "google.maps"],
+    "types": ["vite/client"],
     "noEmit": true,
     "composite": false,
     "declaration": false,

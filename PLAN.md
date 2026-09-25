@@ -2,6 +2,13 @@
 
 Find the locality in a new Indian city that best preserves the day-to-day life you have now.
 
+> **Status (v2, after the hackathon).** The product is now static-first: an offline pipeline (`pipeline/`,
+> DuckDB over Overture Maps + OpenStreetMap) derives every city's localities and named places, and the browser
+> does the home scan and matching from those files. There is no server, no SQLite, no live API. The taxonomy
+> grew from 9 to 25 everyday categories (`shared/src/categories.ts`). Sections 2–4.4 below describe the v1
+> hackathon build and are kept for the reasoning; the current architecture is in `README.md` and
+> `pipeline/README.md`. Sections 4.5–4.6 (the experience and design system) still hold.
+
 ## 1. Product scope (v1, hackathon)
 
 - **Input**: user's current home address (anywhere in India) + a target city. Optional: one anchor address (work or college) used for commute relationships.
@@ -13,22 +20,22 @@ Find the locality in a new Indian city that best preserves the day-to-day life y
 
 | # | Decision |
 |---|---|
-| Data source | Google Maps Platform only: Places API (New) Nearby Search, Geocoding, Places Autocomplete (New), Routes API |
+| Data source | OpenStreetMap, no API keys: Photon (address search + geocoding), Overpass (amenities around a point), OSRM public demo server (drive times), OpenFreeMap vector tiles (basemap). All rate-limited public services, identified with `OSM_USER_AGENT`. |
 | Locality unit | Curated seed list per city (~50–60 names), forward-geocoded to center + viewport; filtered for residential-ness |
-| Residential filter | `apartment_building/apartment_complex/condominium_complex/housing_complex` count within 1.5 km of center; `< 5` → flagged non-residential, excluded from ranking, kept in DB |
+| Residential filter | `building=apartments|residential` + `landuse=residential` features within 1.5 km of center, counted server-side (`out count`, polygons never downloaded); `< 5` → flagged non-residential, excluded from ranking, kept in DB |
 | Baseline capture | Auto-scan around home → user edits categories with 3-level importance (must-have / nice-to-have / don't care) and can remove individual places that aren't part of their life |
 | Scan geometry | Both home and locality scans measure from a single center point using identical per-category radii |
-| Scoring mode | Quantity-first: counts within radius, capped by Google's 20-result ceiling |
-| Megastore | Any `supermarket` with `userRatingCount ≥ 300` and `rating ≥ 4.0` (Enterprise SKU fields, this query only) |
+| Scoring mode | Quantity-first: nearest-first counts within radius, capped at 20 per category (`NEARBY_MAX_RESULTS`) so dense areas saturate honestly |
+| Megastore | OSM has no ratings. A megastore is a `shop=supermarket` carrying a `brand` tag (chains: D-Mart, Reliance, More…) or any `department_store` / `wholesale` / `mall` |
 | Comparison | `score = min(candidate / baseline, 1.2)`; baseline 0 on a kept category → treat as 1 |
 | Weights | must-have = 3, nice-to-have = 1, don't care = excluded; overall = weighted mean × 100 |
 | Equivalence | overall ≥ 85 AND every must-have category ≥ 70 |
 | Routine thread | Derived, not scored: ordered chain of must-have categories (+ anchor if given) e.g. `HOME → TRANSIT → WORK → GYM → FOOD → HOME`. Drawn on the home map, then *recreated* on each candidate by snapping each node to the nearest stored place of that category. A node with no place inside its radius renders hollow. |
-| Anchor (work/college) | Optional. Not scored. Routes API drive-time home→anchor from each top-3 locality center, shown as a commute relationship. |
-| Precompute | CLI script per city → SQLite; stores `place_id`s, lat/lng, and derived counts only — never names/ratings. Google's Places policy only sanctions caching `place_id`; keeping coordinates and counts is a knowing gray area accepted for the hackathon, treated as a cache that `scan --force` rebuilds. |
-| Live cost per request | ~10 Nearby Search (home scan) + 1 Geocode + 3–6 Routes |
+| Anchor (work/college) | Optional. Not scored. OSRM drive-time from each top-3 locality center to the anchor, shown as a commute relationship. |
+| Precompute | CLI script per city → SQLite; stores OSM ids, lat/lng, and derived counts (ODbL data, attribution shown on the map). `scan --force` rebuilds. |
+| Live cost per request | 1 Overpass union query for the home scan (~5–15 s on public servers; cached in `point_scans` by ~10 m cell for a week) + 3–6 OSRM routes. Address suggestions are 1 Photon call per keystroke burst. |
 | Explanations | Deterministic. `explainRows` in `/shared/explain.ts` derives the verdict and keep / change / give-up / gain lines from the ledger. A locality's one-line *character* is hand-written in the seed list. No model call anywhere. |
-| Airport | Informational only (Routes API drive-time to city's main airport, top 3 only); shown as metadata, not a badge |
+| Airport | Informational only (OSRM drive-time to city's main airport, top 3 only; straight-line estimate at 22 km/h if OSRM is down); shown as metadata, not a badge |
 | Same-city | Allowed; exclude the locality containing the home address |
 | Sparse baseline | Warn ("matches will be lenient"), never block |
 | Results | Top 3 |
@@ -38,7 +45,7 @@ Find the locality in a new Indian city that best preserves the day-to-day life y
 
 ## 3. Category taxonomy
 
-| Key | Label | Google `includedTypes` | Radius | Glyph | Notes |
+| Key | Label | OSM tags (`osm` filters in `/shared/categories.ts`) | Radius | Glyph | Notes |
 |---|---|---|---|---|---|
 | `grocery` | Grocery | `supermarket`, `grocery_store`, `convenience_store` | 750 m | square | Shrunk to stay under 20-cap |
 | `megastore` | Megastore | `supermarket` + rating gate | 3 km | hexagon | Requests `rating`, `userRatingCount` |
@@ -57,8 +64,8 @@ All radii, thresholds, caps, and weights live in `/shared/scoring.ts` as named c
 ## 4. Architecture
 
 ```
-/client   Vite + React + TS      linear 3-movement flow, Google Maps JS with custom map style
-/server   Express + TS           /api routes, Google client, Drizzle
+/client   Vite + React + TS      linear 3-movement flow, MapLibre GL on OpenFreeMap tiles repainted to the atlas palette
+/server   Express + TS           /api routes, OSM client (Photon / Overpass / OSRM), Drizzle
 /shared   TS                     types, category taxonomy, scoring constants, scoring function, routine derivation, explanation
 /scripts  TS (tsx)               seed + scan CLI for precompute
 ```
@@ -103,8 +110,9 @@ locality_amenity_counts
 GET  /api/cities
      → [{ id, name, subRegions? }]
 
-GET  /api/suggest?q=<text>                       -- Places Autocomplete (New), region IN, max 5
-     → [{ placeId, label, secondary }]
+GET  /api/suggest?q=<text>                       -- Photon, India bbox, max 5
+     → [{ placeId, label, secondary }]           -- placeId is a self-contained ref (coords + labels, base64url);
+                                                 -- Photon has no lookup-by-id, so no second call is needed
 
 POST /api/baseline
      body: { placeId, anchorPlaceId? }              -- from Autocomplete
@@ -222,7 +230,7 @@ Desktop is asymmetric: map ~62% left, editorial column right.
 └──────────────────────────────────┴───────────────────────────┘
 ```
 
-- **Map** (Google Maps JS, custom map ID): paper land, grey-teal water, hairline roads, all default POI markers and labels off. Home is an accent-filled ring. Every scanned place is a category glyph (`AdvancedMarkerElement` with custom SVG). Hairline spokes join home to its must-have places so the area reads as an ecosystem, not pins.
+- **Map** (MapLibre GL, OpenFreeMap Positron repainted at load): paper land, grey-teal water, hairline roads, every POI layer hidden. Home is an accent-filled ring. Every scanned place is a category glyph drawn by the same SVG `AtlasLayer` that powers the keyless paper fallback, projected through the map's camera. Hairline spokes join home to its must-have places so the area reads as an ecosystem, not pins.
 - **Prominence** encodes importance: must-have glyphs 12px filled, nice-to-have 9px stroke, don't-care 6px at 40% opacity. Changing a row's importance re-renders its glyphs immediately.
 - **Radius lens** (signature interaction): a draggable ring around home, default 1 km. Dragging it re-labels the column live — "Within 1.0 km: 4 groceries, 2 gyms, 11 restaurants · 82% of your must-haves." Display-only; scoring still uses the fixed per-category radii in §3, and the footnote says so.
 - **Ledger rows** replace the table: glyph, label, count as an oversized numeral, and a three-word importance control (`Must · Nice · Skip`) with the active word underlined in accent — not a segmented pill. Hover a row → its glyphs pulse. `worship` defaults to Skip.
@@ -304,7 +312,7 @@ Reference feeling: *"a really good city magazine accidentally became an app."* A
 | `ink-soft` | `#6B6862` | metadata, secondary labels, don't-care glyphs |
 | `rule` | `#D9D3C7` | hairlines, dividers, input underlines |
 | `ballpoint` | `#2B4ACB` | **the one accent** — the user's home and places, the closest match, primary actions, *yours* ticks. Named for the pen you'd circle places on a paper map with. |
-| `map-land` `#E9E4D8` · `map-water` `#C9D3D1` · `map-green` `#D3D9C6` · `map-road` `#D5CFC2` · `map-built` `#E2DCCF` · `map-label` `#857F73` | | Google Maps cloud style; POI layer off |
+| `map-land` `#E9E4D8` · `map-water` `#C9D3D1` · `map-green` `#D3D9C6` · `map-road` `#D5CFC2` · `map-built` `#E2DCCF` · `map-label` `#857F73` | | Applied to the vector basemap in `applyAtlasPaint`; POI layers hidden |
 
 No status colours. "Weak" is expressed by position on the range strip, an accent highlight, and a label — never red/amber/green.
 
@@ -335,7 +343,7 @@ Scale: 12 · 15 · 20 · 32 · 56 · 96 · 144. Oversized numbers (56–144) alw
 
 **M1 — Precompute pipeline (1 day)**
 - Drizzle schema + migration (including `points`).
-- Google client wrapper: geocode, nearbySearch (typed, field-mask aware, SKU-minimal, returns `location`).
+- OSM client wrapper (`/server/src/osm.ts`): Photon autocomplete + geocode, one Overpass union query per point with host fallback, OSRM drive time with straight-line fallback.
 - Seed JSON for 4 cities (Claude drafts, you skim).
 - `scan` script, run for Pune first; sanity-check counts, residential flags, and a plotted sample of points by eye.
 - Run remaining 3 cities.
@@ -346,7 +354,7 @@ Scale: 12 · 15 · 20 · 32 · 56 · 96 · 144. Oversized numbers (56–144) alw
 - `/api/cities`, `/api/baseline` (with `places`), `/api/match` (without Routes).
 
 **M3 — Atlas UI (1½ days)**
-- Custom Google Maps cloud style matching the `map-*` tokens; POI layer off. Glyph set and `AdvancedMarkerElement` renderer.
+- MapLibre basemap repainted to the `map-*` tokens; POI layers hidden. Glyph set and the projected SVG `AtlasLayer`; paper drawn until tiles load.
 - Movement I and II end-to-end on Pune: underline inputs, city row, ledger rows with importance control, prominence-by-importance, radius lens, place removal with undo, routine thread on the map.
 - Movement III: results column with honest verdict header, ranked entries with mini threads, viewport outlines with serif map labels.
 - Locality detail page: profile header, map fragment with recreated thread, range-strip ledger, four columns rendered from `explainRows`.
@@ -360,7 +368,7 @@ Scale: 12 · 15 · 20 · 32 · 56 · 96 · 144. Oversized numbers (56–144) alw
 
 **M5 — Demo hardening (½ day)**
 - Demo script: Bandra West → Pune (equivalent found), and a case that produces "No locality in … fully matches your current setup".
-- Error states in the interface's voice for Google quota/auth failures ("Maps didn't answer. Try again in a moment.") — no toasts stacked over the map.
+- Error states in the interface's voice for Overpass/Photon timeouts ("Maps didn't answer. Try again in a moment.") — no toasts stacked over the map.
 - Screenshot pass against §4.6's avoid list; remove one element per screen if it isn't earning its place.
 - README with setup + scan instructions.
 
@@ -370,8 +378,9 @@ Scale: 12 · 15 · 20 · 32 · 56 · 96 · 144. Oversized numbers (56–144) alw
 |---|---|
 | Geocoding returns a wrong/huge viewport for a locality name | Scan from center only (viewport is display-only); manual override field in seed JSON |
 | 20-result ceiling flattens dense categories | Radii shrunk for `food`/`grocery`; saturated-vs-saturated reads as 1.0 which is honest |
-| Google quota exhausted mid-demo | Precompute means live path is ~10 Places calls; keep a second API key as fallback |
-| Places caching ToS | Only `place_id` caching is sanctioned; we also keep coordinates + aggregate counts as a knowing gray area for the hackathon, never names/ratings, rebuilt by `scan --force` |
+| Public Overpass is slow or down mid-demo | One request per point; `overpass.openstreetmap.fr` first (the only host reachable from the dev network), mirrors as fallback; live home scans cached in `point_scans`; the demo addresses are pre-warmed before going on stage; `VITE_MOCK=1` is the last resort |
+| OSM POI coverage in Indian cities is patchy | Scoring is ratio-based, so uneven-but-consistent coverage still ranks sensibly; the sparse-baseline warning covers thin home areas; seed list favours well-mapped localities |
+| ODbL attribution | MapLibre attribution control kept (styled small); stored data is OSM ids + coordinates + counts |
 | Translation animation janks on stage laptop | Built on Maps camera `moveCamera` + CSS transitions only; reduced-motion path is the same end state and is the demo fallback |
 | Custom map style looks like a default map | Style reviewed against tokens at M3; POI layer off is non-negotiable |
 | Seed list misses a locality judges know | Re-running `scan` for one city is cheap; add names to JSON and rerun |

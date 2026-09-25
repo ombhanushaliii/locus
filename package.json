@@ -3,17 +3,21 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "workspaces": ["shared", "server", "client", "scripts"],
+  "workspaces": [
+    "shared",
+    "client",
+    "pipeline"
+  ],
   "scripts": {
-    "dev": "concurrently -n server,client -c blue,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
-    "build": "npm run build -w shared && npm run build -w server && npm run build -w client",
+    "dev": "npm run dev -w client",
+    "build": "npm run build -w client",
+    "preview": "npm run preview -w client",
     "test": "npm run test -w shared",
-    "typecheck": "tsc -b shared server client scripts",
-    "seed": "npm run seed -w scripts",
-    "scan": "npm run scan -w scripts --"
+    "typecheck": "tsc -p client/tsconfig.json && tsc -p pipeline/tsconfig.json",
+    "data": "npm run index -w pipeline -- --sync",
+    "deploy": "npm run build -w client && npx wrangler pages deploy"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2",
     "typescript": "^5.7.3"
   }
 }

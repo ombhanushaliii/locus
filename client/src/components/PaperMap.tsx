@@ -7,7 +7,7 @@ export type { AtlasProps, Outline, PaperPlace, Projector } from './AtlasLayer';
 
 /**
  * The atlas surface drawn entirely in SVG from coordinates. Used in mock mode
- * (no Google Maps browser key); GoogleAtlasMap shares the same props.
+ * (VITE_PAPER=1, or before tiles load); LibreAtlasMap shares the same props.
  */
 export function PaperMap(props: AtlasProps) {
   const { center, spanM, dim, className, children } = props;
